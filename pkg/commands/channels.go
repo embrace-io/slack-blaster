@@ -12,7 +12,7 @@ func Channels(slackToken string, pattern string, sharedOnly bool) error {
 	api := slack.New(slackToken)
 
 	slackChannels := []slack.Channel{}
-	types := []string{"public_channel"}
+	types := []string{"public_channel", "private_channel"}
 	err := error(nil)
 	cursor := ""
 

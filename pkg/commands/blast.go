@@ -25,7 +25,7 @@ func Blast(c *cli.Context) error {
 	channelFile := c.String("channels-list")
 	slackToken := c.GlobalString("slack-token")
 	messageFile := c.String("message-file")
-	forReal := c.Bool("for-real") 
+	forReal := c.Bool("for-real")
 	if channelFile != "" {
 		file, err := ioutil.ReadFile(channelFile)
 		if err != nil {
@@ -36,10 +36,23 @@ func Blast(c *cli.Context) error {
 
 	api := slack.New(slackToken)
 
-	slackChannels, err := api.GetChannels(true)
+	slackChannels := []slack.Channel{}
+	types := []string{"public_channel", "private_channel"}
+	err := error(nil)
+	cursor := ""
 
-	if err != nil {
-		return err
+	// Loop through pagination till we get all slack channels.
+	for hasMorePages := true; hasMorePages; hasMorePages = !(cursor == "") {
+		slackChannelsPage := []slack.Channel{}
+		params := slack.GetConversationsParameters{cursor, "true", 1000, types}
+
+		slackChannelsPage, cursor, err = api.GetConversations(&params)
+
+		if err != nil {
+			return err
+		}
+
+		slackChannels = append(slackChannels, slackChannelsPage...)
 	}
 
 	sendChannels := []slack.Channel{}
@@ -66,23 +79,28 @@ func Blast(c *cli.Context) error {
 		for c := range sendChannels {
 			cx := sendChannels[c]
 			go func(chanl *slack.Channel, wg *sync.WaitGroup) {
-				// join the channel first if we aren't in it yet
-				ch, err := api.JoinChannel(chanl.Name)
-				if err != nil {
-					fmt.Println(err)
-					wg.Done()
-					return
+				// Join public channel before sending
+				if !chanl.IsPrivate {
+					fmt.Printf("%s is a public channel. attempting to join", chanl.Name)
+					// join the channel first if we aren't in it yet
+					ch, err := api.JoinChannel(chanl.Name)
+					if err != nil {
+						fmt.Println(err)
+						wg.Done()
+						return
+					}
+					fmt.Printf("joined channel %s\n", ch.Name)
 				}
-				fmt.Printf("joined channel %s\n", ch.Name)
-				_, _, err = api.PostMessage(ch.ID, string(message), slack.PostMessageParameters{
+
+				_, _, err = api.PostMessage(chanl.ID, string(message), slack.PostMessageParameters{
 					Markdown:  true,
 					Parse:     "full",
 					LinkNames: 1,
 				})
 				if err != nil {
-					fmt.Printf("error sending message to %s - %s", ch.Name, err.Error())
+					fmt.Printf("error sending message to %s - %s", chanl.Name, err.Error())
 				}
-				fmt.Printf("Done sending message to %s\n", ch.Name)
+				fmt.Printf("Done sending message to %s\n", chanl.Name)
 				wg.Done()
 			}(&cx, &wg)
 		}
