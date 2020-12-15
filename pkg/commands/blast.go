@@ -36,23 +36,9 @@ func Blast(c *cli.Context) error {
 
 	api := slack.New(slackToken)
 
-	slackChannels := []slack.Channel{}
-	types := []string{"public_channel", "private_channel"}
-	err := error(nil)
-	cursor := ""
-
-	// Loop through pagination till we get all slack channels.
-	for hasMorePages := true; hasMorePages; hasMorePages = !(cursor == "") {
-		slackChannelsPage := []slack.Channel{}
-		params := slack.GetConversationsParameters{cursor, "true", 1000, types}
-
-		slackChannelsPage, cursor, err = api.GetConversations(&params)
-
-		if err != nil {
-			return err
-		}
-
-		slackChannels = append(slackChannels, slackChannelsPage...)
+	slackChannels, err := ValidChannels(slackToken)
+	if err != nil {
+		return err
 	}
 
 	sendChannels := []slack.Channel{}
